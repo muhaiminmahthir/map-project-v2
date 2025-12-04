@@ -285,15 +285,6 @@
                 right: 20px;
             }
         }
-        .feature-label div {
-            background: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            white-space: nowrap;
-        }
     </style>
 </head>
 <body>
