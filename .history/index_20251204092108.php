@@ -339,10 +339,6 @@
                             <div style="width:40px;height:40px;background:#33691e;border-radius:4px;margin:0 auto 4px;"></div>
                             <span>Google Sat</span>
                         </button>
-                        <button class="basemap-btn" data-basemap="carto">
-                            <div style="width:40px;height:40px;background:#f5f5f5;border-radius:4px;margin:0 auto 4px;"></div>
-                            <span>Carto Light</span>
-                        </button>
                     </div>
                 </div>
                 
@@ -423,56 +419,33 @@
         // ============================================================
         // Base Map Layers
         // ============================================================
-
-        // basemaps from xx
-        const googleSat = L.tileLayer(
-            'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&hl=en',
-            {
-                maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-            }
-        );
-
-        const googleHybrid = L.tileLayer(
-            'http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}&hl=en',
-            {
-                maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-            }
-        );
-
-        const carto = L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-            {
-                maxZoom: 20
-            }
-        );
-
-        // Hook them into the existing basemap keys used by your buttons:
-        //  - data-basemap="osm"
-        //  - data-basemap="satellite"
-        //  - data-basemap="google"
-        //  - data-basemap="google-sat"
         const basemaps = {
-            // OpenStreetMap button
             osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap contributors'
             }),
-
-            // "Satellite" button  → pure imagery
-            satellite: googleSat,
-
-            // "Google Maps" button → hybrid (satellite + labels)
-            google: googleHybrid,
-
-            // "Google Sat" button → also satellite (can be changed to terrain or roadmap if desired)
-            'google-sat': googleSat,
-
-            // Extra: Carto style (not wired to a button yet)
-            carto: carto
+            satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            })
         };
-
+        
+        // Add Google layers if API key is provided
+        if (CONFIG.hasGoogleApi && typeof L.gridLayer.googleMutant === 'function') {
+            basemaps.google = L.gridLayer.googleMutant({
+                type: 'roadmap'
+            });
+            basemaps['google-sat'] = L.gridLayer.googleMutant({
+                type: 'hybrid'
+            });
+        } else {
+            // Fallback to Esri for Google options
+            basemaps.google = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            });
+            basemaps['google-sat'] = basemaps.satellite;
+        }
         
         // ============================================================
         // Initialize Map
