@@ -291,9 +291,9 @@
     <?php
     // Configuration - UPDATE THESE VALUES
     $config = [
-        'geoserver_url' => 'http://YOUR_GEOSERVER_VM_IP:8080/geoserver',
-        'workspace' => 'mapproject',
-        'google_maps_api_key' => 'YOUR_GOOGLE_MAPS_API_KEY', // Optional
+        'geoserver_url' => 'http://35.187.255.127:8080/geoserver',
+        'workspace' => 'geodb',
+        //'google_maps_api_key' => 'YOUR_GOOGLE_MAPS_API_KEY', // Optional
     ];
     ?>
     
