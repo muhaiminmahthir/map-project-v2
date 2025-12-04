@@ -346,17 +346,6 @@
                     </div>
                 </div>
                 
-                <!-- Views -->
-                <div class="layer-section">
-                    <h3>View</h3>
-                    <select id="viewSelect" style="width:100%; padding:6px 8px; border-radius:4px; border:1px solid #ccc;">
-                        <option value="">Loading views…</option>
-                    </select>
-                    <p style="font-size:0.75rem; color:#777; margin-top:4px;">
-                        These match the views from the editor (VM1).
-                    </p>
-                </div>
-
                 <!-- GeoServer Layers -->
                 <div class="layer-section">
                     <h3>Data Layers</h3>
@@ -496,109 +485,6 @@
         
         let currentBasemap = 'osm';
         
-        // ============================================================
-        // VM1 "views" integration (View1 / View2 / etc.)
-        // ============================================================
-
-        // TODO: change this to the actual URL/hostname of VM1
-        // e.g. 'http://192.168.56.10' or 'http://vm1.map.local'
-        const VM1_BASE_URL = 'http://34.124.247.53';
-
-        // Same endpoint VM1 uses in map.js (SPATIAL_VIEWS_URL)
-        const SPATIAL_VIEWS_URL = `${VM1_BASE_URL}/api/spatial/views`;
-
-        let currentViewKey = null;
-
-        // Update CQL filter on all WMS layers based on currentViewKey
-        function applyViewFilterToWms() {
-            // If your attribute is named differently, change here:
-            // e.g. const filter = currentViewKey ? `view_id = ${currentViewKey}` : null;
-            const filter = currentViewKey ? `view_key = '${currentViewKey}'` : null;
-
-            Object.values(wmsLayers).forEach(layer => {
-                if (!layer || !layer.setParams) return;
-
-                if (filter) {
-                    layer.setParams({ CQL_FILTER: filter });
-                } else {
-                    // Remove filter -> show everything
-                    layer.setParams({ CQL_FILTER: null });
-                }
-            });
-        }
-
-        // Load list of views from VM1
-        async function loadViewsFromVm1() {
-            const select = document.getElementById('viewSelect');
-            if (!select) return;
-
-            try {
-                const res = await fetch(SPATIAL_VIEWS_URL, {
-                    headers: { 'Accept': 'application/json' }
-                });
-
-                if (!res.ok) {
-                    console.error('Failed to load views (HTTP ' + res.status + ')');
-                    select.innerHTML = '<option value="">No views available</option>';
-                    currentViewKey = null;
-                    applyViewFilterToWms(); // no filter
-                    return;
-                }
-
-                const data = await res.json();
-                const viewList = data.views || [];
-
-                if (!viewList.length) {
-                    select.innerHTML = '<option value="">No views created yet</option>';
-                    currentViewKey = null;
-                    applyViewFilterToWms();
-                    return;
-                }
-
-                // Build dropdown
-                select.innerHTML = '';
-                viewList.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.view_key;                     // e.g. "view1"
-                    opt.textContent = v.view_name || v.view_key; // display "View 1"
-                    select.appendChild(opt);
-                });
-
-                // Pick first view as default
-                currentViewKey = viewList[0].view_key;
-                select.value = currentViewKey;
-                applyViewFilterToWms();
-
-                // Optional: update small status text
-                const status = document.getElementById('geoserver-status');
-                if (status) {
-                    const name = viewList[0].view_name || viewList[0].view_key;
-                    status.textContent = `Connected to GeoServer · View: ${name}`;
-                }
-
-            } catch (err) {
-                console.error('Error loading views from VM1', err);
-                const select = document.getElementById('viewSelect');
-                if (select) {
-                    select.innerHTML = '<option value="">Failed to load views</option>';
-                }
-                currentViewKey = null;
-                applyViewFilterToWms();
-            }
-        }
-
-        // Handle when user changes the view
-        const viewSelectEl = document.getElementById('viewSelect');
-        if (viewSelectEl) {
-            viewSelectEl.addEventListener('change', () => {
-                currentViewKey = viewSelectEl.value || null;
-                applyViewFilterToWms();
-            });
-        }
-
-        // Kick off load on page startup
-        loadViewsFromVm1();
-
         // ============================================================
         // GeoServer WMS Layers
         // ============================================================
