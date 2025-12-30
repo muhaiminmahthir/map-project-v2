@@ -79,13 +79,6 @@ let currentViewId = null;
 function applyViewFilterToWms() {
     const filter = currentViewId ? `view_id=${currentViewId}` : null;
 
-    ['roads', 'areas', 'buildings'].forEach(k => {
-        const layer = wmsLayers[k];
-        if (!layer || !layer.setParams) return;
-
-        layer.setParams({ CQL_FILTER: filter || null });
-    });
-    /*
     Object.values(wmsLayers).forEach(layer => {
         if (!layer || !layer.setParams) return;
 
@@ -95,7 +88,6 @@ function applyViewFilterToWms() {
             layer.setParams({ CQL_FILTER: null });
         }
     });
-    */
 }
 
 // Zoom map to the extent of the current view's areas
