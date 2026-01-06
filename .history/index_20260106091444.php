@@ -107,7 +107,7 @@
                         <div class="layer-item" data-layer="areas">
                             <input type="checkbox" class="layer-checkbox" id="layer-areas" checked>
                             <div class="layer-icon areas"></div>
-                            <label class="layer-name" for="layer-areas">Drawn Areas</label>
+                            <label class="layer-name" for="layer-areas">Survey Areas</label>
                         </div>
                         <!-- no used currently
                         <div class="layer-item" data-layer="buildings">
