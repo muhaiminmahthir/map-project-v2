@@ -79,6 +79,13 @@ let currentViewId = null;
 function applyViewFilterToWms() {
     const filter = currentViewId ? `view_id=${currentViewId}` : null;
 
+    ['roads', 'areas'].forEach(k => {
+        const layer = wmsLayers[k];
+        if (!layer || !layer.setParams) return;
+
+        layer.setParams({ CQL_FILTER: filter || null });
+    });
+    /*
     Object.values(wmsLayers).forEach(layer => {
         if (!layer || !layer.setParams) return;
 
@@ -88,6 +95,7 @@ function applyViewFilterToWms() {
             layer.setParams({ CQL_FILTER: null });
         }
     });
+    */
 }
 
 // Zoom map to the extent of the current view's areas
@@ -208,6 +216,100 @@ loadViewsFromVm1();
 // ============================================================
 const wmsUrl = proxyUrl(`${CONFIG.workspace}/wms`);
 
+// Building plan overlays - populated dynamically from GeoServer
+let BUILDING_PLAN_OVERLAYS = [];
+
+// Current building plan layer (dynamically created)
+let currentBuildingPlanLayer = [];
+let buildingPlanVisible = true;
+let buildingPlanOpacity = 0.6;
+
+// ============================================================
+// Fetch available GeoTIFF layers from GeoServer
+// ============================================================
+async function fetchBuildingPlanOverlays() {
+    try {
+        const capabilitiesUrl = `${wmsUrl}&service=WMS&request=GetCapabilities`;
+        console.log('Fetching capabilities from:', capabilitiesUrl);
+        
+        const response = await fetch(capabilitiesUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'text/xml');
+        
+        // Try multiple selectors (WMS 1.1.0 vs 1.3.0 have different structures)
+        let layers = xml.querySelectorAll('Layer > Name');
+        
+        // If no results, try alternative selectors
+        if (layers.length === 0) {
+            layers = xml.getElementsByTagName('Name');
+        }
+        
+        console.log('All layer names found:', Array.from(layers).map(l => l.textContent));
+        
+        const overlays = [];
+        
+        layers.forEach(layer => {
+            const fullLayerName = layer.textContent;
+            
+            // Extract just the layer name (remove workspace prefix if present)
+            const layerName = fullLayerName.includes(':') 
+                ? fullLayerName.split(':')[1] 
+                : fullLayerName;
+            
+            // DEBUG: Log each layer being checked
+            console.log('Checking layer:', layerName);
+            
+            // Filter for GeoTIFF layers - ADJUST THIS PATTERN IF NEEDED
+            if (layerName.toLowerCase().includes('geotiff') || 
+                layerName.toLowerCase().includes('tiff') ||
+                layerName.toLowerCase().startsWith('msb')) {
+                overlays.push({
+                    id: layerName,
+                    name: formatLayerDisplayName(layerName)
+                });
+            }
+        });
+        
+        // Sort alphabetically by name
+        overlays.sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log(`Found ${overlays.length} building plan overlay(s):`, overlays);
+        return overlays;
+        
+    } catch (error) {
+        console.error('Failed to fetch GeoServer capabilities:', error);
+        return [];
+    }
+}
+// Format layer ID into a display name
+// 'msb01-geotiff' -> 'MSB01 Building Plan'
+function formatLayerDisplayName(layerId) {
+    // Remove the -geotiff suffix
+    const baseName = layerId.replace(/-geotiff$/i, '');
+    
+    // Check for common patterns like 'msb01', 'block-a', etc.
+    const msbMatch = baseName.match(/^(msb)(\d+)$/i);
+    if (msbMatch) {
+        return `${msbMatch[1].toUpperCase()}${msbMatch[2].padStart(2, '0')} Building Plan`;
+    }
+    
+    // Default: capitalize and add "Building Plan"
+    const formatted = baseName
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    
+    return `${formatted} Building Plan`;
+}
+
+// ============================================================
+// WMS Layers (roads, areas)
+// ============================================================
 const wmsLayers = {
     roads: L.tileLayer.wms(wmsUrl, {
         layers: `${CONFIG.workspace}:roads`,
@@ -224,20 +326,139 @@ const wmsLayers = {
         styles: '',
         version: '1.1.0',
         maxZoom: 20
-    }),
-    buildings: L.tileLayer.wms(wmsUrl, {
-        layers: `${CONFIG.workspace}:buildings`,
+    })
+};
+
+// Function to create a building plan layer
+function createBuildingPlanLayer(layerId) {
+    return L.tileLayer.wms(wmsUrl, {
+        layers: `${CONFIG.workspace}:${layerId}`,
         format: 'image/png',
         transparent: true,
         styles: '',
         version: '1.1.0',
-        maxZoom: 20
-    })
-};
+        maxZoom: 20,
+        opacity: buildingPlanOpacity
+    });
+}
+
+// Function to switch building plan overlays (supports multiple)
+function switchBuildingPlans(layerIds) {
+    // Remove all existing building plan layers
+    currentBuildingPlanLayers.forEach(layer => {
+        map.removeLayer(layer);
+    });
+    currentBuildingPlanLayers = [];
+    
+    if (!layerIds || layerIds.length === 0) return;
+    
+    // Add each selected layer
+    layerIds.forEach(layerId => {
+        const layer = createBuildingPlanLayer(layerId);
+        currentBuildingPlanLayers.push(layer);
+        
+        if (buildingPlanVisible) {
+            layer.addTo(map);
+            layer.bringToBack();
+        }
+    });
+    
+    // Ensure basemap stays at bottom
+    if (basemaps[currentBasemap]) {
+        basemaps[currentBasemap].bringToBack();
+    }
+}
+
+// Initialize building plan dropdown (now async)
+async function initBuildingPlanControls() {
+    const select = document.getElementById('buildingPlanSelect');
+    const toggle = document.getElementById('buildingPlanToggle');
+    const opacitySlider = document.getElementById('buildingPlanOpacity');
+    const opacityValue = document.getElementById('opacityValue');
+    const overlayControl = document.querySelector('.overlay-control');
+    
+    if (!select) return;
+    
+    // Show loading state
+    select.innerHTML = '<option value="">Loading building plans...</option>';
+    select.disabled = true;
+    
+    // Fetch layers from GeoServer
+    BUILDING_PLAN_OVERLAYS = await fetchBuildingPlanOverlays();
+    
+    // Populate dropdown
+    select.innerHTML = '';
+    select.disabled = false;
+    
+    if (BUILDING_PLAN_OVERLAYS.length === 0) {
+        select.innerHTML = '<option value="">No building plans available</option>';
+        select.disabled = true;
+        return;
+    }
+    
+    BUILDING_PLAN_OVERLAYS.forEach((plan) => {
+        const opt = document.createElement('option');
+        opt.value = plan.id;
+        opt.textContent = plan.name;
+        select.appendChild(opt);
+    });
+    
+    // Load first plan by default
+    select.options[0].selected = true;
+    switchBuildingPlans([BUILDING_PLAN_OVERLAYS[0].id]);
+    
+    // Handle dropdown change (multiple selection)
+    select.addEventListener('change', () => {
+        const selectedIds = Array.from(select.selectedOptions).map(opt => opt.value);
+        switchBuildingPlans(selectedIds);
+    });
+    
+    // Handle toggle on/off
+    if (toggle) {
+        toggle.addEventListener('change', (e) => {
+            buildingPlanVisible = e.target.checked;
+            
+            if (buildingPlanVisible && currentBuildingPlanLayer) {
+                currentBuildingPlanLayer.addTo(map);
+                currentBuildingPlanLayer.bringToBack();
+                if (basemaps[currentBasemap]) {
+                    basemaps[currentBasemap].bringToBack();
+                }
+            } else if (currentBuildingPlanLayer) {
+                map.removeLayer(currentBuildingPlanLayer);
+            }
+            
+            if (overlayControl) {
+                overlayControl.classList.toggle('disabled', !buildingPlanVisible);
+            }
+        });
+    }
+    
+    // Handle opacity slider
+    if (opacitySlider && opacityValue) {
+        opacitySlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            buildingPlanOpacity = value / 100;
+            
+            if (currentBuildingPlanLayer) {
+                currentBuildingPlanLayer.setOpacity(buildingPlanOpacity);
+            }
+            
+            opacityValue.textContent = `${value}%`;
+        });
+    }
+}
 
 // Add default layers
 wmsLayers.roads.addTo(map);
 wmsLayers.areas.addTo(map);
+
+// Initialize building plan controls after DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBuildingPlanControls);
+} else {
+    initBuildingPlanControls();
+}
 
 // ============================================================
 // Check GeoServer Connection
@@ -441,4 +662,179 @@ document.querySelectorAll('.layer-item').forEach(item => {
         const layerKey = item.dataset.layer;
         fitToLayerBounds(layerKey);
     });
+});
+
+// ============================================================
+// Address Search (using Nominatim / OpenStreetMap)
+// ============================================================
+const searchInput = document.getElementById('addressSearch');
+const searchBtn = document.getElementById('searchBtn');
+const searchResults = document.getElementById('searchResults');
+
+let searchMarker = null;
+let searchTimeout = null;
+
+// Create a custom marker icon for search results
+const searchMarkerIcon = L.divIcon({
+    className: 'search-marker-icon',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
+});
+
+// Search function using Nominatim API
+async function searchAddress(query) {
+    if (!query || query.trim().length < 3) {
+        searchResults.innerHTML = '<div class="search-no-results">Type at least 3 characters</div>';
+        return;
+    }
+
+    searchResults.innerHTML = '<div class="search-loading">Searching...</div>';
+
+    try {
+        // Use Nominatim with preference for Malaysia results
+        const url = `https://nominatim.openstreetmap.org/search?` + new URLSearchParams({
+            q: query,
+            format: 'json',
+            addressdetails: 1,
+            limit: 5,
+            countrycodes: 'my', // Prefer Malaysia
+            'accept-language': 'en'
+        });
+
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'SpatialDataViewer/1.0'
+            }
+        });
+
+        if (!response.ok) throw new Error('Search failed');
+
+        const data = await response.json();
+
+        if (data.length === 0) {
+            // If no results in Malaysia, try worldwide search
+            const worldUrl = `https://nominatim.openstreetmap.org/search?` + new URLSearchParams({
+                q: query,
+                format: 'json',
+                addressdetails: 1,
+                limit: 5,
+                'accept-language': 'en'
+            });
+
+            const worldResponse = await fetch(worldUrl, {
+                headers: {
+                    'User-Agent': 'SpatialDataViewer/1.0'
+                }
+            });
+
+            const worldData = await worldResponse.json();
+
+            if (worldData.length === 0) {
+                searchResults.innerHTML = '<div class="search-no-results">No results found</div>';
+                return;
+            }
+
+            displaySearchResults(worldData);
+            return;
+        }
+
+        displaySearchResults(data);
+
+    } catch (err) {
+        console.error('Search error:', err);
+        searchResults.innerHTML = '<div class="search-no-results">Search failed. Try again.</div>';
+    }
+}
+
+// Display search results
+function displaySearchResults(results) {
+    searchResults.innerHTML = '';
+
+    results.forEach(result => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+
+        // Extract a clean name
+        const name = result.name || result.display_name.split(',')[0];
+        const address = result.display_name;
+
+        item.innerHTML = `
+            <div class="search-result-name">${name}</div>
+            <div class="search-result-address">${address}</div>
+        `;
+
+        item.addEventListener('click', () => {
+            goToLocation(parseFloat(result.lat), parseFloat(result.lon), name);
+            searchResults.innerHTML = '';
+            searchInput.value = name;
+        });
+
+        searchResults.appendChild(item);
+    });
+}
+
+// Go to location and add marker
+function goToLocation(lat, lon, name) {
+    // Remove previous search marker
+    if (searchMarker) {
+        map.removeLayer(searchMarker);
+    }
+
+    // Determine zoom level based on place type
+    const zoomLevel = 16;
+
+    // Fly to location
+    map.flyTo([lat, lon], zoomLevel, {
+        duration: 1.5
+    });
+
+    // Add marker
+    searchMarker = L.marker([lat, lon], {
+        icon: L.divIcon({
+            className: 'search-marker',
+            html: `<div style="
+                background: #f44336;
+                width: 24px;
+                height: 24px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            "></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+        })
+    }).addTo(map);
+
+    // Add popup with name
+    searchMarker.bindPopup(`<strong>${name}</strong>`).openPopup();
+}
+
+// Event listeners for search
+searchBtn.addEventListener('click', () => {
+    searchAddress(searchInput.value);
+});
+
+searchInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        searchAddress(searchInput.value);
+    }
+});
+
+// Auto-search as user types (with debounce)
+searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        if (searchInput.value.length >= 3) {
+            searchAddress(searchInput.value);
+        } else {
+            searchResults.innerHTML = '';
+        }
+    }, 500); // Wait 500ms after user stops typing
+});
+
+// Clear results when clicking elsewhere
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-container') && !e.target.closest('.search-results')) {
+        searchResults.innerHTML = '';
+    }
 });
