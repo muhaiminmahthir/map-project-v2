@@ -16,12 +16,6 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="index.css">
-    <link rel="preconnect" href="https://unpkg.com">
-
-    <!-- Preconnect to External Domains-->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
     <?php
