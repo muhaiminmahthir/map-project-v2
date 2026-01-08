@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nak Tengok Map</title>
+    <title>Map Viewer - Min</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -18,8 +18,8 @@
     <?php
     // Configuration - UPDATE THESE VALUES
     $config = [
-        'geoserver_url' => 'http://35.187.255.127:8080/geoserver',
-        'workspace' => 'geodb',
+        'geoserver_url' => 'http://geoserversafe.duckdns.org:65437/geoserver',
+        'workspace' => 'gis_project',
         //'google_maps_api_key' => 'YOUR_GOOGLE_MAPS_API_KEY', // Optional
     ];
     ?>
@@ -46,6 +46,21 @@
             </div>
             
             <div class="sidebar-content">
+                <!-- Address Search -->
+                <div class="layer-section">
+                    <h3>Search Location</h3>
+                    <div class="search-container">
+                        <input type="text" id="addressSearch" class="search-input" placeholder="Search address or place...">
+                        <button id="searchBtn" class="search-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <path d="m21 21-4.35-4.35"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="searchResults" class="search-results"></div>
+                </div>
+
                 <!-- Base Map Selection -->
                 <div class="layer-section">
                     <h3>Base Map</h3>
@@ -92,12 +107,33 @@
                         <div class="layer-item" data-layer="areas">
                             <input type="checkbox" class="layer-checkbox" id="layer-areas" checked>
                             <div class="layer-icon areas"></div>
-                            <label class="layer-name" for="layer-areas">Survey Areas</label>
+                            <label class="layer-name" for="layer-areas">Drawn Areas</label>
                         </div>
-                        <div class="layer-item" data-layer="buildings">
-                            <input type="checkbox" class="layer-checkbox" id="layer-buildings">
-                            <div class="layer-icon buildings"></div>
-                            <label class="layer-name" for="layer-buildings">Buildings</label>
+                    </div>
+                </div>
+
+                <!-- Building Plan Overlay -->
+                <div class="layer-section">
+                    <h3>Building Plan Overlay</h3>
+                    <div class="overlay-control">
+                        <div class="overlay-toggle">
+                            <input type="checkbox" id="buildingPlanToggle" checked>
+                            <label for="buildingPlanToggle">Show Building Plan</label>
+                        </div>
+                        
+                        <div class="overlay-select">
+                            <label for="buildingPlanSelect">Select Plan</label>
+                            <select id="buildingPlanSelect" multiple>
+                                <option value="">Loading plans...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="opacity-control">
+                            <label for="buildingPlanOpacity">Opacity</label>
+                            <div class="opacity-slider-container">
+                                <input type="range" id="buildingPlanOpacity" min="0" max="100" value="60" class="opacity-slider">
+                                <span id="opacityValue" class="opacity-value">60%</span>
+                            </div>
                         </div>
                     </div>
                 </div>

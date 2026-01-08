@@ -123,7 +123,7 @@
                         
                         <div class="overlay-select">
                             <label for="buildingPlanSelect">Select Plan</label>
-                            <select id="buildingPlanSelect">
+                            <select id="buildingPlanSelect" multiple>
                                 <option value="">Loading plans...</option>
                             </select>
                         </div>
