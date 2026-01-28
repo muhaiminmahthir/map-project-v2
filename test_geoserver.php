@@ -6,7 +6,7 @@
 
 header('Content-Type: text/html; charset=utf-8');
 
-$geoserver_base = 'http://geoserversafe.duckdns.org:65437/geoserver';
+$geoserver_base = 'http://192.168.1.102:8080/geoserver';
 $test_url = $geoserver_base . '/web/';
 
 echo "<h1>🔍 GeoServer Connection Test</h1>";

@@ -70,7 +70,7 @@ function proxyUrl(path) {
 // VM1 "views" integration (View1 / View2 / etc.)
 // ============================================================
 
-const VM1_BASE_URL = 'http://34.124.247.53';
+const VM1_BASE_URL = 'http://10.164.14.64';
 const SPATIAL_VIEWS_URL = `${VM1_BASE_URL}/api/spatial/views`;
 
 let currentViewId = null;

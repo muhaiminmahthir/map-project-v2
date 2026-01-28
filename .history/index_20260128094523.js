@@ -70,7 +70,7 @@ function proxyUrl(path) {
 // VM1 "views" integration (View1 / View2 / etc.)
 // ============================================================
 
-const VM1_BASE_URL = 'http://34.124.247.53';
+const VM1_BASE_URL = 'http://10.164.14.64';
 const SPATIAL_VIEWS_URL = `${VM1_BASE_URL}/api/spatial/views`;
 
 let currentViewId = null;
@@ -79,6 +79,13 @@ let currentViewId = null;
 function applyViewFilterToWms() {
     const filter = currentViewId ? `view_id=${currentViewId}` : null;
 
+    ['roads', 'areas'].forEach(k => {
+        const layer = wmsLayers[k];
+        if (!layer || !layer.setParams) return;
+
+        layer.setParams({ CQL_FILTER: filter || null });
+    });
+    /*
     Object.values(wmsLayers).forEach(layer => {
         if (!layer || !layer.setParams) return;
 
@@ -88,6 +95,7 @@ function applyViewFilterToWms() {
             layer.setParams({ CQL_FILTER: null });
         }
     });
+    */
 }
 
 // Zoom map to the extent of the current view's areas
@@ -208,6 +216,103 @@ loadViewsFromVm1();
 // ============================================================
 const wmsUrl = proxyUrl(`${CONFIG.workspace}/wms`);
 
+// Building plan overlays - populated dynamically from GeoServer
+let BUILDING_PLAN_OVERLAYS = [];
+
+// Current building plan layers (ARRAY for multiple selections)
+let currentBuildingPlanLayers = [];
+let buildingPlanVisible = true;
+let buildingPlanOpacity = 0.6;
+
+// Tom Select instance reference
+let buildingPlanTomSelect = null;
+
+// ============================================================
+// Fetch available GeoTIFF layers from GeoServer
+// ============================================================
+async function fetchBuildingPlanOverlays() {
+    try {
+        const capabilitiesUrl = `${wmsUrl}&service=WMS&request=GetCapabilities`;
+        console.log('Fetching capabilities from:', capabilitiesUrl);
+        
+        const response = await fetch(capabilitiesUrl);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(text, 'text/xml');
+        
+        // Try multiple selectors (WMS 1.1.0 vs 1.3.0 have different structures)
+        let layers = xml.querySelectorAll('Layer > Name');
+        
+        // If no results, try alternative selectors
+        if (layers.length === 0) {
+            layers = xml.getElementsByTagName('Name');
+        }
+        
+        console.log('All layer names found:', Array.from(layers).map(l => l.textContent));
+        
+        const overlays = [];
+        
+        layers.forEach(layer => {
+            const fullLayerName = layer.textContent;
+            
+            // Extract just the layer name (remove workspace prefix if present)
+            const layerName = fullLayerName.includes(':') 
+                ? fullLayerName.split(':')[1] 
+                : fullLayerName;
+            
+            // DEBUG: Log each layer being checked
+            console.log('Checking layer:', layerName);
+            
+            // Filter for GeoTIFF layers - ADJUST THIS PATTERN IF NEEDED
+            if (layerName.toLowerCase().includes('geotiff') || 
+                layerName.toLowerCase().includes('tiff') ||
+                layerName.toLowerCase().startsWith('msb')) {
+                overlays.push({
+                    id: layerName,
+                    name: formatLayerDisplayName(layerName)
+                });
+            }
+        });
+        
+        // Sort alphabetically by name
+        overlays.sort((a, b) => a.name.localeCompare(b.name));
+        
+        console.log(`Found ${overlays.length} building plan overlay(s):`, overlays);
+        return overlays;
+        
+    } catch (error) {
+        console.error('Failed to fetch GeoServer capabilities:', error);
+        return [];
+    }
+}
+// Format layer ID into a display name
+// 'msb01-geotiff' -> 'MSB01 Building Plan'
+function formatLayerDisplayName(layerId) {
+    // Remove the -geotiff suffix
+    const baseName = layerId.replace(/-geotiff$/i, '');
+    
+    // Check for common patterns like 'msb01', 'block-a', etc.
+    const msbMatch = baseName.match(/^(msb)(\d+)$/i);
+    if (msbMatch) {
+        return `${msbMatch[1].toUpperCase()}${msbMatch[2].padStart(2, '0')} Building Plan`;
+    }
+    
+    // Default: capitalize and add "Building Plan"
+    const formatted = baseName
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    
+    return `${formatted} Building Plan`;
+}
+
+// ============================================================
+// WMS Layers (roads, areas)
+// ============================================================
 const wmsLayers = {
     roads: L.tileLayer.wms(wmsUrl, {
         layers: `${CONFIG.workspace}:roads`,
@@ -224,20 +329,175 @@ const wmsLayers = {
         styles: '',
         version: '1.1.0',
         maxZoom: 20
-    }),
-    buildings: L.tileLayer.wms(wmsUrl, {
-        layers: `${CONFIG.workspace}:buildings`,
+    })
+};
+
+// Function to create a building plan layer
+function createBuildingPlanLayer(layerId) {
+    return L.tileLayer.wms(wmsUrl, {
+        layers: `${CONFIG.workspace}:${layerId}`,
         format: 'image/png',
         transparent: true,
         styles: '',
         version: '1.1.0',
-        maxZoom: 20
-    })
-};
+        maxZoom: 20,
+        opacity: buildingPlanOpacity
+    });
+}
+
+// Function to switch building plan overlays (supports MULTIPLE selections)
+function switchBuildingPlans(layerIds) {
+    // Remove all existing building plan layers
+    currentBuildingPlanLayers.forEach(layer => {
+        map.removeLayer(layer);
+    });
+    currentBuildingPlanLayers = [];
+    
+    if (!layerIds || layerIds.length === 0) return;
+    
+    // Add each selected layer
+    layerIds.forEach(layerId => {
+        const layer = createBuildingPlanLayer(layerId);
+        currentBuildingPlanLayers.push(layer);
+        
+        if (buildingPlanVisible) {
+            layer.addTo(map);
+            layer.bringToBack();
+        }
+    });
+    
+    // Ensure basemap stays at bottom
+    if (basemaps[currentBasemap]) {
+        basemaps[currentBasemap].bringToBack();
+    }
+}
+
+// Initialize building plan dropdown with Tom Select (now async)
+async function initBuildingPlanControls() {
+    const select = document.getElementById('buildingPlanSelect');
+    const toggle = document.getElementById('buildingPlanToggle');
+    const opacitySlider = document.getElementById('buildingPlanOpacity');
+    const opacityValue = document.getElementById('opacityValue');
+    const overlayControl = document.querySelector('.overlay-control');
+    
+    if (!select) return;
+    
+    // Fetch layers from GeoServer
+    BUILDING_PLAN_OVERLAYS = await fetchBuildingPlanOverlays();
+    
+    // Populate the native select first (Tom Select will use these)
+    select.innerHTML = '';
+    
+    if (BUILDING_PLAN_OVERLAYS.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No building plans available';
+        opt.disabled = true;
+        select.appendChild(opt);
+        
+        // Initialize Tom Select even with no options (shows placeholder)
+        buildingPlanTomSelect = new TomSelect(select, {
+            plugins: ['remove_button'],
+            placeholder: 'No building plans available',
+            maxItems: null
+        });
+        buildingPlanTomSelect.disable();
+        return;
+    }
+    
+    // Add options
+    BUILDING_PLAN_OVERLAYS.forEach((plan) => {
+        const opt = document.createElement('option');
+        opt.value = plan.id;
+        opt.textContent = plan.name;
+        select.appendChild(opt);
+    });
+    
+    // Initialize Tom Select with tag-style multi-select
+    buildingPlanTomSelect = new TomSelect(select, {
+        plugins: ['remove_button'],
+        placeholder: 'Select building plans...',
+        maxItems: null, // Allow unlimited selections
+        hideSelected: false, // Keep selected items visible in dropdown
+        closeAfterSelect: false, // Keep dropdown open for multiple selections
+        onChange: (values) => {
+            // values is an array of selected layer IDs
+            switchBuildingPlans(values);
+        },
+        render: {
+            item: function(data, escape) {
+                return `<div><span>${escape(data.text)}</span></div>`;
+            },
+            option: function(data, escape) {
+                return `<div>${escape(data.text)}</div>`;
+            }
+        }
+    });
+    
+    // Select first plan by default
+    if (BUILDING_PLAN_OVERLAYS.length > 0) {
+        buildingPlanTomSelect.addItem(BUILDING_PLAN_OVERLAYS[0].id);
+    }
+    
+    // Handle toggle on/off
+    if (toggle) {
+        toggle.addEventListener('change', (e) => {
+            buildingPlanVisible = e.target.checked;
+            
+            currentBuildingPlanLayers.forEach(layer => {
+                if (buildingPlanVisible) {
+                    layer.addTo(map);
+                    layer.bringToBack();
+                } else {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            if (buildingPlanVisible && basemaps[currentBasemap]) {
+                basemaps[currentBasemap].bringToBack();
+            }
+            
+            if (overlayControl) {
+                overlayControl.classList.toggle('disabled', !buildingPlanVisible);
+            }
+            
+            // Disable/enable Tom Select
+            if (buildingPlanTomSelect) {
+                if (buildingPlanVisible) {
+                    buildingPlanTomSelect.enable();
+                } else {
+                    buildingPlanTomSelect.disable();
+                }
+            }
+        });
+    }
+    
+    // Handle opacity slider
+    if (opacitySlider && opacityValue) {
+        opacitySlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            buildingPlanOpacity = value / 100;
+            
+            // Apply to ALL selected layers
+            currentBuildingPlanLayers.forEach(layer => {
+                layer.setOpacity(buildingPlanOpacity);
+            });
+            
+            opacityValue.textContent = `${value}%`;
+        });
+    }
+}
 
 // Add default layers
 wmsLayers.roads.addTo(map);
 wmsLayers.areas.addTo(map);
+
+// Initialize building plan controls after DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBuildingPlanControls);
+} else {
+    initBuildingPlanControls();
+}
 
 // ============================================================
 // Check GeoServer Connection

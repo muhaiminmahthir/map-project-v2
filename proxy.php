@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // =====================================================
 // CONFIGURATION - Update this to your GeoServer
 // =====================================================
-$geoserver_base = 'http://geoserversafe.duckdns.org:65437/geoserver';
+$geoserver_base = 'http://192.168.1.102:8080/geoserver';
 
 // =====================================================
 // DEBUG MODE - Set to true to see detailed errors

@@ -27,7 +27,7 @@
     <?php
     // Configuration - UPDATE THESE VALUES
     $config = [
-        'geoserver_url' => 'http://geoserversafe.duckdns.org:65437/geoserver',
+        'geoserver_url' => 'http://192.168.1.102:8080/geoserver',
         'workspace' => 'gis_project',
         //'google_maps_api_key' => 'YOUR_GOOGLE_MAPS_API_KEY', // Optional
     ];

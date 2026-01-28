@@ -6,7 +6,7 @@
 
 header('Content-Type: text/html; charset=utf-8');
 
-$geoserver_base = 'http://geoserversafe.duckdns.org:65437/geoserver';
+$geoserver_base = 'http://192.168.1.102:8080/geoserver';
 $test_url = $geoserver_base . '/web/';
 
 echo "<h1>🔍 GeoServer Connection Test</h1>";
@@ -83,7 +83,7 @@ if ($errno) {
 
 // Test 4: Try WMS GetCapabilities
 echo "<h2>4. WMS GetCapabilities Test</h2>";
-$wms_url = $geoserver_base . '/geodb/wms?service=WMS&request=GetCapabilities';
+$wms_url = $geoserver_base . '/gis_project/wms?service=WMS&request=GetCapabilities';
 echo "Testing: <code>$wms_url</code><br><br>";
 
 $ch = curl_init();
@@ -110,14 +110,14 @@ if ($error) {
         echo "✅ <b>WMS is working!</b><br>";
         
         // Check if workspace exists
-        if (strpos($response, 'geodb:roads') !== false) {
-            echo "✅ Found layer: geodb:roads<br>";
+        if (strpos($response, 'gis_project:roads') !== false) {
+            echo "✅ Found layer: gis_project:roads<br>";
         }
-        if (strpos($response, 'geodb:areas') !== false) {
-            echo "✅ Found layer: geodb:areas<br>";
+        if (strpos($response, 'gis_project:areas') !== false) {
+            echo "✅ Found layer: gis_project:areas<br>";
         }
-        if (strpos($response, 'geodb:buildings') !== false) {
-            echo "✅ Found layer: geodb:buildings<br>";
+        if (strpos($response, 'gis_project:buildings') !== false) {
+            echo "✅ Found layer: gis_project:buildings<br>";
         }
     } else {
         echo "⚠️ Got response but may not be valid WMS<br>";

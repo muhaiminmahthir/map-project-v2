@@ -3,22 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nak Tengok Map</title>
+    <title>Map Viewer - Min</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    
+    <!-- Tom Select CSS (for tag-style multi-select) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css">
     
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="index.css">
+    <link rel="preconnect" href="https://unpkg.com">
+
+    <!-- Preconnect to External Domains-->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
     <?php
     // Configuration - UPDATE THESE VALUES
     $config = [
-        'geoserver_url' => 'http://geoserversafe.duckdns.org:65437/geoserver',
+        'geoserver_url' => 'http://192.168.1.102:8080/geoserver',
         'workspace' => 'gis_project',
         //'google_maps_api_key' => 'YOUR_GOOGLE_MAPS_API_KEY', // Optional
     ];
@@ -107,12 +116,33 @@
                         <div class="layer-item" data-layer="areas">
                             <input type="checkbox" class="layer-checkbox" id="layer-areas" checked>
                             <div class="layer-icon areas"></div>
-                            <label class="layer-name" for="layer-areas">Survey Areas</label>
+                            <label class="layer-name" for="layer-areas">Drawn Areas</label>
                         </div>
-                        <div class="layer-item" data-layer="buildings">
-                            <input type="checkbox" class="layer-checkbox" id="layer-buildings">
-                            <div class="layer-icon buildings"></div>
-                            <label class="layer-name" for="layer-buildings">Buildings</label>
+                    </div>
+                </div>
+
+                <!-- Building Plan Overlay -->
+                <div class="layer-section">
+                    <h3>Building Plan Overlay</h3>
+                    <div class="overlay-control">
+                        <div class="overlay-toggle">
+                            <input type="checkbox" id="buildingPlanToggle" checked>
+                            <label for="buildingPlanToggle">Show Building Plans</label>
+                        </div>
+                        
+                        <div class="overlay-select">
+                            <label for="buildingPlanSelect">Select Plans</label>
+                            <select id="buildingPlanSelect" multiple placeholder="Select building plans...">
+                                <!-- Options populated dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div class="opacity-control">
+                            <label for="buildingPlanOpacity">Opacity</label>
+                            <div class="opacity-slider-container">
+                                <input type="range" id="buildingPlanOpacity" min="0" max="100" value="60" class="opacity-slider">
+                                <span id="opacityValue" class="opacity-value">60%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -154,6 +184,9 @@
     
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Tom Select JS (for tag-style multi-select) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
     
     <!-- Google Maps API (optional - for Google layers) -->
     <?php if (!empty($config['google_maps_api_key']) && $config['google_maps_api_key'] !== 'YOUR_GOOGLE_MAPS_API_KEY'): ?>
